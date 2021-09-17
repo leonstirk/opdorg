@@ -1,31 +1,41 @@
-#' Create dflist of the census csv frames
-#' @param path string
-#' @param files character
-#' @param mbs character
-#' @return list
+#' Create tibble from the census csv frames
+#' @param dflist list
+#' @param agg_lv character
+#' @param sp_unit_ids character
+#' @return tibble
 #' @export
-makeDflist2013 <- function(path, files, mbs) {
-  ## List of dataframes. One dataframe for each census section (dwelling, household, family, individual_1, individual_2, etc.)
-  dflist <- lapply(1:length(files), function (i) { read.csv(paste(path, files[i], sep = ''), header = F, encoding = 'UTF-8') })
+make2013CensusTibble <- function(dflist, agg_lv = 'mb', sp_unit_ids = NA) {
 
   ## Shift column names from first row to column headers
-  for(i in 1:length(files)) {
+  for(i in 1:length(dflist)) {
     names(dflist[[i]]) <- dflist[[i]][1,]
     dflist[[i]] <- dflist[[i]][-1,]
     rownames(dflist[[i]]) <- NULL
   }
 
-  ## get MB rows only
-  dflist <- lapply(dflist, function(x) {
-    filter(x, Description == '' & unlist(lapply(strsplit(Area_Code_and_Description, ' '), function (x) { x[1] })) == "MB")
-  })
+  ## get only rows that correspond to the specified aggregation level
+  if(agg_lv %in% c('mb', 'MB', 'Mb')) {
+    dflist <- lapply(dflist, function(x) {
+      dplyr::filter(x, Description == '' & unlist(lapply(strsplit(Area_Code_and_Description, ' '), function (x) { x[1] })) == "MB")
+    })
+  } else if (agg_lv %in% c('AU', 'au', 'Au')) {
 
-  ## Get MB rows in the relevant spatial dataframe
-  dflist <- lapply(dflist, function(x) { filter(x, Code %in% mbs) })
+  } else if (agg_lv %in% c('Ward', 'ward')) {
+
+  } else if (agg_lv %in% c('TA', 'ta', 'Ta')) {
+
+  } else if (agg_lv %in% c('Region', 'region')) {
+
+  }
+
+  ## Get specified spatial unit rows only
+  if(!is.na(sp_unit_ids)){
+    dflist <- lapply(dflist, function(x) { dplyr::filter(x, Code %in% sp_unit_ids) })
+  }
 
   ## Clean up dflist names
   for(i in 1:length(dflist)) {
-    names(dflist[[i]]) <- names(dflist[[i]]) %>% cleanStringVec2013
+    names(dflist[[i]]) <- names(dflist[[i]]) %>% clean2013colnames
   }
 
   ## drop the fist column "area code and description"
@@ -33,64 +43,168 @@ makeDflist2013 <- function(path, files, mbs) {
     x[2:ncol(x)]
   })
 
-  return(dflist)
-}
-
-#' Create 'full' census tibble from dflist (from makeDflist)
-#' @param dflist list
-#' @return tibble
-#' @export
-makeCensusTibble <- function(dflist) {
   census_data <- rlist::list.cbind(lapply(dflist, function(df) {
-    years <- df %>% names %>% stringr::str_extract('^[0-9]{4}+\\s') %>% as.factor %>% levels()
+    years <- df %>% names %>% stringr::str_extract('^[0-9]{4}+_') %>% stringr::str_replace_all('_$', '') %>% as.factor %>% levels()
 
     ylist <- lapply(years, function(y) {
       tmp <- df[stringr::str_which(names(df), y)]
-      names(tmp) <- tmp %>% names %>% stringr::str_replace_all('^[0-9]{4}+\\s', '')
+      names(tmp) <- tmp %>% names %>% stringr::str_replace_all('^[0-9]{4}+_', '')
       tmp <- cbind(df[1], tmp)
       tmp$year <- y
-      tmp <- tmp %>% as_tibble
+      tmp <- tmp %>% dplyr::as_tibble()
       return(tmp)
     })
 
     ref <- ylist %>% lapply(names) %>% lapply(length) %>% unlist
     ref <- which(ref == min(ref))[1]
 
-    ylist <- ylist %>% lapply(., function(y) { y %>% select((ylist[[ref]] %>% names)) })
+    ylist <- ylist %>% lapply(., function(y) { y %>% dplyr::select((ylist[[ref]] %>% names)) })
 
     return(rlist::list.rbind(ylist))
   }))
 
-  census_data <- census_data %>% select(unique(names(census_data)))
+  census_data <- census_data %>% dplyr::select(unique(names(census_data)))
   census_data[-c(1)] <- census_data[-c(1)] %>% lapply(as.numeric)
 
   ## All values < -900 to NA
   for(i in 1:length(census_data)) { census_data[which(census_data[i] < -900),i] <- NA }
 
-  ## meshblock colname
-  names(census_data)[1] <- 'meshblock'
+  ## ## meshblock colname
+  ## names(census_data)[1] <- 'meshblock'
 
-  census_data <- census_data %>% as_tibble()
+  census_data <- census_data %>% dplyr::as_tibble()
+  census_data$year <- census_data$year %>% as.factor()
+
   return(census_data)
 }
 
+#' Create tibble from the census csv frames
+#' @param dflist list
+#' @param looklist list
+#' @param sp_unit_ids character
+#' @param keep_2018 logical
+#' @return tibble
+#' @export
+make2018CensusTibble <- function(dflist, looklist, sp_unit_ids = NA, keep_2018 = F) {
+
+  ## Shift column names from first row to column headers
+  for(i in 1:length(dflist)) {
+    names(dflist[[i]]) <- dflist[[i]][1,]
+    dflist[[i]] <- dflist[[i]][-1,]
+    rownames(dflist[[i]]) <- NULL
+  }
+
+  ## Get specified spatial unit rows only
+  if(!is.na(sp_unit_ids)){
+    dflist <- lapply(dflist, function(x) { dplyr::filter(x, SA12018_V1_00 %in% sp_unit_ids) })
+  }
+
+  for(i in 1:length(looklist)) {
+    names(looklist[[i]]) <- looklist[[i]][1,]
+    names(looklist[[i]]) <- c('full', 'match')
+    looklist[[i]] <- looklist[[i]][-1,]
+    rownames(looklist[[i]]) <- NULL
+  }
+
+  dnames <- dflist %>% lapply(., function(df) { data.frame(match = df %>% names %>% stringr::str_replace_all('C[0-9]{2}_', '') %>% unique()) })
+
+  dnames <- lapply(1:length(dflist), function(i) {
+    looklist[[i]]$match <- looklist[[i]]$match %>% stringr::str_replace_all('C[0-9]{2}_', '')
+    looklist[[i]]$full <- looklist[[i]]$full %>% stringr::str_replace_all('Census_[0-9]{4}_', '')
+
+    conv <- dplyr::left_join(dnames[[i]], looklist[[i]], by = 'match')
+
+    tmp <- data.frame(years = names(dflist[[i]]) %>% stringr::str_extract('C[0-9]{2}_') %>% stringr::str_replace_all('^C', 'Census_20'), match = names(dflist[[i]]) %>% str_replace_all('C[0-9]{2}_', ''))
+
+    tmp$match <- tmp$match %>% stringr::str_replace_all('Brd_UK_Ireland', 'Brd_UK_and_Ireland')
+    tmp$match <- tmp$match %>% stringr::str_replace_all('Brd_N_America', 'Brd_North_America')
+    tmp$match <- tmp$match %>% stringr::str_replace_all('Brd_T_Stated', 'Brd_Total_stated')
+    tmp$match <- tmp$match %>% stringr::str_replace_all('Arrival_Total_OB', 'ArrivalNZ_Total_OB')
+
+    tmp <- dplyr::left_join(tmp, conv, by = 'match')
+    tmp$years_full <- tmp$full
+    tmp$years_full[!is.na(tmp$full)] <- paste(tmp$years[which(!is.na(tmp$full))], tmp$full[which(!is.na(tmp$full))], sep = '')
+    tmp$years_full[which(is.na(tmp$years))] <- tmp$full[which(is.na(tmp$years))]
+
+    return(tmp$years_full)
+  })
+
+  dflist <- lapply(1:length(dflist), function(i) {
+    names(dflist[[i]]) <- dnames[[i]]
+    return(dflist[[i]])
+  })
+
+  ## Clean up dflist names
+  for(i in 1:length(dflist)) {
+    names(dflist[[i]]) <- names(dflist[[i]]) %>% clean2018colnames
+  }
+
+  dflist <- lapply(dflist, function(df) {
+    df[which(!is.na(names(df)))]
+  })
+
+  census_data <- rlist::list.cbind(lapply(dflist, function(df) {
+    years <- df %>% names %>% stringr::str_extract('^[0-9]{4}+_') %>% stringr::str_replace_all('_$', '') %>% as.factor %>% levels()
+
+    ylist <- lapply(years, function(y) {
+      tmp <- df[stringr::str_which(names(df), y)]
+      names(tmp) <- tmp %>% names %>% stringr::str_replace_all('^[0-9]{4}+_', '')
+      tmp <- cbind(df[1], tmp)
+      tmp$year <- y
+      tmp <- tmp %>% dplyr::as_tibble()
+      return(tmp)
+    })
+
+    if(!keep_2018) {
+      ## Trim out the variables only collected in 2018
+      ref <- ylist %>% lapply(names) %>% lapply(length) %>% unlist
+      ref <- which(ref == min(ref))[1]
+      ylist <- ylist %>% lapply(., function(y) { y %>% dplyr::select((ylist[[ref]] %>% names)) })
+    }
+
+    return(dplyr::bind_rows(ylist))
+  }))
+
+  census_data <- census_data %>% dplyr::select(unique(names(census_data)))
+  census_data[-c(1)] <- census_data[-c(1)] %>% lapply(as.numeric)
+
+  ## All values < -900 to NA
+  for(i in 1:length(census_data)) { census_data[which(census_data[i] < -900),i] <- NA }
+
+  ## Statistical area colname
+  names(census_data)[1] <- 'sa1'
+  census_data <- census_data %>% dplyr::as_tibble()
+  census_data <- census_data %>% dplyr::select(sa1, year, names(census_data)[!names(census_data) %in% c('sa1', 'year')])
+  census_data$year <- census_data$year %>% as.factor()
+
+  return(census_data)
+}
+
+####################################################################################################
+
 #' Clean name strings
-#' @param stringVec character
+#' @param colnames character
 #' @return character
-cleanStringVec2013 <- function(stringVec){
-  sapply(stringVec, function(string) {
+clean2013colnames <- function(colnames){
+  sapply(colnames, function(string) {
     ## Lowercase
     temp <- tolower(string)
     ## digits between brackets (including brackets)
     temp <- stringr::str_replace_all(temp, "\\([\\d\\$]+\\)", "")
     ## get rid of this weird thing
     temp <- stringr::str_replace_all(temp, "\\x96", "to")
+    ## replace / with _
+    temp <- stringr::str_replace_all(temp, '/', '_')
+
     ## Remove everything that is not a number or letter
-    temp <- stringr::str_replace_all(temp,"[^0-9a-zA-Z\\s_]", "")
-    ## Shrink down to just one white space
-    temp <- stringr::str_replace_all(temp,"[\\s]+", " ")
+    temp <- stringr::str_replace_all(temp, "[^0-9a-zA-Z\\s_]", "")
+
     ## Replace '_' with ' '
-    temp <- stringr::str_replace_all(temp,"[_]", " ")
+    temp <- stringr::str_replace_all(temp, "[_]", " ")
+
+    ## Shrink down to just one white space
+    temp <- stringr::str_replace_all(temp, "[\\s]+", " ")
+
     ## Replace 'occupied private dwelling' with 'OPD'
     temp <- stringr::str_replace_all(temp, "occupied private dwelling", "OPD")
     ## Replace 'private occupied dwelling' with 'OPD'
@@ -106,124 +220,17 @@ cleanStringVec2013 <- function(stringVec){
     if(length(indexes) > 0){
       temp <- temp[-indexes]
     }
+    temp <- tolower(temp)
+    temp <- snakecase::to_any_case(temp, 'snake')
     return(temp)
   })
 }
 
-#' Create dflist of the census csv frames
-#' @param path character
-#' @param files character
-#' @param lookups character
-#' @param mbs character
-#' @return list
-#' @export
-#'
-makeDflist2018 <- function(path, files, lookups, sas) {
-  ## List of dataframes. One dataframe for each census section (dwelling, household, family, individual_1, individual_2, etc.)
-  dflist <- lapply(1:length(files), function (i) { read.csv(paste(path, files[i], sep = ''), header = F, encoding = 'UTF-8') })
-
-  ## Shift column names from first row to column headers
-  for(i in 1:length(files)) {
-    names(dflist[[i]]) <- dflist[[i]][1,]
-    dflist[[i]] <- dflist[[i]][-1,]
-    rownames(dflist[[i]]) <- NULL
-  }
-
-  ## Get SA rows in the relevant spatial dataframe
-  dflist <- lapply(dflist, function(x) { filter(x, SA12018_V1_00 %in% sas) })
-
-  looklist <- lapply(1:length(lookups), function (i) { read.csv(paste(path, lookups[i], sep = ''), header = F, encoding = 'UTF-8') })
-
-  for(i in 1:length(looklist)) {
-    names(looklist[[i]]) <- looklist[[i]][1,]
-    names(looklist[[i]]) <- c('full', 'match')
-    looklist[[i]] <- looklist[[i]][-1,]
-    rownames(looklist[[i]]) <- NULL
-  }
-
-  dnames <- dflist %>% lapply(., function(df) { data.frame(match = df %>% names %>% str_replace_all('C[0-9]{2}_', '') %>% unique()) })
-
-  dnames <- lapply(1:length(dflist), function(i) {
-    looklist[[i]]$match <- looklist[[i]]$match %>% str_replace_all('C[0-9]{2}_', '')
-    looklist[[i]]$full <- looklist[[i]]$full %>% str_replace_all('Census_[0-9]{4}_', '')
-
-    conv <- left_join(dnames[[i]], looklist[[i]], by = 'match')
-
-    tmp <- data.frame(years = names(dflist[[i]]) %>% str_extract('C[0-9]{2}_') %>% str_replace_all('^C', 'Census_20'), match = names(dflist[[i]]) %>% str_replace_all('C[0-9]{2}_', ''))
-
-    tmp$match <- tmp$match %>% str_replace_all('Brd_UK_Ireland', 'Brd_UK_and_Ireland')
-    tmp$match <- tmp$match %>% str_replace_all('Brd_N_America', 'Brd_North_America')
-    tmp$match <- tmp$match %>% str_replace_all('Brd_T_Stated', 'Brd_Total_stated')
-    tmp$match <- tmp$match %>% str_replace_all('Arrival_Total_OB', 'ArrivalNZ_Total_OB')
-
-    tmp <- left_join(tmp, conv, by = 'match')
-    tmp$years_full <- tmp$full
-    tmp$years_full[!is.na(tmp$full)] <- paste(tmp$years[which(!is.na(tmp$full))], tmp$full[which(!is.na(tmp$full))], sep = '')
-    tmp$years_full[which(is.na(tmp$years))] <- tmp$full[which(is.na(tmp$years))]
-
-    return(tmp$years_full)
-  })
-
-  dflist <- lapply(1:length(dflist), function(i) {
-    names(dflist[[i]]) <- dnames[[i]]
-    return(dflist[[i]])
-  })
-
-  ## Clean up dflist names
-  for(i in 1:length(dflist)) {
-    names(dflist[[i]]) <- names(dflist[[i]]) %>% cleanStringVec2018
-  }
-
-  dflist <- lapply(dflist, function(df) {
-    df[which(!is.na(names(df)))]
-  })
-
-  return(dflist)
-}
-
-#' Create 'full' census tibble from dflist (from makeDflist)
-#' @param dflist list
-#' @return tibble
-#' @export
-makeCensusTibble2018 <- function(dflist) {
-  census_data <- rlist::list.cbind(lapply(dflist, function(df) {
-    years <- df %>% names %>% stringr::str_extract('^[0-9]{4}+\\s') %>% as.factor %>% levels()
-
-    ylist <- lapply(years, function(y) {
-      tmp <- df[stringr::str_which(names(df), y)]
-      names(tmp) <- tmp %>% names %>% stringr::str_replace_all('^[0-9]{4}+\\s', '')
-      tmp <- cbind(df[1], tmp)
-      tmp$year <- y
-      tmp <- tmp %>% as_tibble
-      return(tmp)
-    })
-
-    ref <- ylist %>% lapply(names) %>% lapply(length) %>% unlist
-    ref <- which(ref == min(ref))[1]
-
-    ylist <- ylist %>% lapply(., function(y) { y %>% select((ylist[[ref]] %>% names)) })
-
-    return(rlist::list.rbind(ylist))
-  }))
-
-  census_data <- census_data %>% select(unique(names(census_data)))
-  census_data[-c(1)] <- census_data[-c(1)] %>% lapply(as.numeric)
-
-  ## All values < -900 to NA
-  for(i in 1:length(census_data)) { census_data[which(census_data[i] < -900),i] <- NA }
-
-  ## Statistical area colname
-  names(census_data)[1] <- 'sa1'
-
-  census_data <- census_data %>% as_tibble()
-  return(census_data)
-}
-
 #' Clean name strings
-#' @param stringVec character
+#' @param colnames character
 #' @return character
-cleanStringVec2018 <- function(stringVec){
-  sapply(stringVec, function(string) {
+clean2018colnames <- function(colnames){
+  sapply(colnames, function(string) {
     ## Lowercase
     temp <- tolower(string)
     ## Replace '_' with ' '
@@ -265,6 +272,8 @@ cleanStringVec2018 <- function(stringVec){
     ##  temp <- temp[-indexes]
     ##}
 
+    temp <- tolower(temp)
+    temp <- snakecase::to_any_case(temp, 'snake')
     return(temp)
   })
 }

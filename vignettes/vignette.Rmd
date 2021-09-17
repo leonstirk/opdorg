@@ -1,0 +1,180 @@
+---
+title: "vignette"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup}
+library(opdorg)
+library(tidyverse)
+library(stringr)
+```
+
+```{r eval=FALSE}
+## NZ 2001-2013 Census MB data
+
+## Read in the data from source or disk
+
+## Get directly from source at StatsNZ
+url <- 'https://www3.stats.govt.nz/meshblock/2013/csv/2013_mb_dataset_Total_New_Zealand_CSV.zip'
+temp <- tempfile()
+download.file(url,temp)
+files <- unzip(temp, list = T)$Name
+dflist <- lapply(files, function(x) { read.csv(unz(temp, x), header = F, encoding = 'UTF-8') })
+unlink(temp)
+
+## OR Download from StatsNZ and get files from disk
+path <- '~/Desktop/projects/nz_census_data/datasets/2013_CSV_Shapefile_MB_Total_New_Zealand/'
+files <- list.files(path, '*.csv')
+files <- files[-6]
+dflist <- lapply(files, function(x) { read.csv(paste0(path,x), header = F, encoding = 'UTF-8') })
+
+###################################################################################################
+
+census_data <- make2013CensusTibble(dflist)
+
+## ## Get only certain meshblocks
+## mbs <- tas$meshblock %>% levels
+## census_data <- make2013CensusTibble(dflist, agg_lv = 'mb', sp_unit_ids = mbs)
+
+###################################################################################################
+
+census_data %>% select(code, year, c(names(census_data)[which(names(census_data) %>% stringr::str_detect('heat'))]))
+
+census_data %>% select(code, year, c(names(census_data)[which(names(census_data) %>% stringr::str_detect('heat'))])) %>%
+  group_by(year) %>%
+  summarise(electricity = mean(fuel_types_used_to_heat_dwellings_total_responses_for_opds_electricity, na.rm = T),
+            coal = mean(fuel_types_used_to_heat_dwellings_total_responses_for_opds_coal, na.rm = T),
+            mains_gas = mean(fuel_types_used_to_heat_dwellings_total_responses_for_opds_mains_gas, na.rm = T),
+            bottled_gas = mean(fuel_types_used_to_heat_dwellings_total_responses_for_opds_bottled_gas, na.rm = T),
+            wood = mean(fuel_types_used_to_heat_dwellings_total_responses_for_opds_wood, na.rm = T),
+            solar = mean(fuel_types_used_to_heat_dwellings_total_responses_for_opds_solar_power, na.rm = T),
+            none = mean(fuel_types_used_to_heat_dwellings_total_responses_for_opds_no_fuels_used_in_this_dwelling, na.rm = T),
+            other = mean(fuel_types_used_to_heat_dwellings_total_responses_for_opds_other_fuels, na.rm = T),
+            total = mean(fuel_types_used_to_heat_dwellings_total_responses_for_opds_total_dwellings_stated, na.rm = T)
+            )
+
+###################################################################################################
+
+## NZ 2006-2018 Census SA1 data
+
+# ## Get directly from source at StatsNZ
+# url <- 'https://www3.stats.govt.nz/2018census/SA1Dataset16jul/Statistical%20Area%201%20dataset%20for%20Census%202018%20-%20total%20New%20Zealand%20-%20CSV_updated_16-7-20.zip'
+# temp <- tempfile()
+# download.file(url,temp)
+# files <- unzip(temp, list = T)$Name
+# files <- files[-5]
+# ## Get the lookuptables from 'https://datafinder.stats.govt.nz/search/?q=statistical+area+1+%282018+Census+only%29+lookup+table'
+# dflist <- lapply(files, function(x) { read.csv(unz(temp, x), header = F, encoding = 'UTF-8') })
+# unlink(temp)
+
+## OR Download from StatsNZ and get files from disk
+path <- '~/Desktop/projects/nz_census_data/datasets/2018_Shapefiles_SA1_Census_Total_NZ/'
+files <- list.files(path, '*sa1.csv')
+files <- files[-5]
+
+lookups <- list.files(path,'*lookup.csv')
+lookups <- lookups[-5]
+
+files <- files[1:2]
+lookups <- lookups[1:2]
+
+dflist <- lapply(files, function(x) { read.csv(paste0(path,x), header = F, encoding = 'UTF-8') })
+looklist <- lapply(lookups, function(x) { read.csv(paste0(path,x), header = F, encoding = 'UTF-8') })
+
+census_data <- make2018CensusTibble(dflist, looklist, keep_2018 = T)
+
+## Get only certain sa1s
+## sas <- tas$sa1 %>% levels
+## census_data <- make2018CensusTibble(dflist, looklist, sp_unit_ids = sas, keep_2018 = T)
+
+####################################################################################################
+
+## heating categories
+names(census_data)[which(names(census_data) %>% str_detect('main_types_of_heating'))] %>% str_remove_all('main_types_of_heating_total_response_')
+
+tmp <- census_data %>% filter(year == '2018') %>%  select(main_types_of_heating_total_response_total_opds,
+                                                          main_types_of_heating_total_response_no_heating_used_opds,
+                                                          main_types_of_heating_total_response_heat_pump_opds,
+                                                          main_types_of_heating_total_response_electric_heater_opds,
+                                                          main_types_of_heating_total_response_fixed_gas_heater_opds,
+                                                          main_types_of_heating_total_response_portable_gas_heater_opds,
+                                                          main_types_of_heating_total_response_pellet_fire_opds,
+                                                          main_types_of_heating_total_response_other_types_of_heating_opds,
+                                                          main_types_of_heating_total_response_wood_burner_opds,
+                                                          main_types_of_heating_total_response_coal_burner_opds
+                                                          )
+names(tmp) <- names(tmp) %>% str_remove_all('main_types_of_heating_total_response_')
+
+a <- stack(tmp)
+a %>% dplyr::as_tibble() %>% group_by(ind) %>% summarise(sum(values, na.rm = T))
+
+## "Over-response rate"
+b <- cbind(tmp[1], tmp[-1] %>% apply(1,function(x){ sum(x, na.rm = T) }))
+b$p <- b$`tmp[-1] %>% apply(1, function(x) {`/b$total_opds
+
+## Proportion of homes with heating type per sa1
+tmp <- tmp %>% mutate(across(c(names(tmp[-1])), ~ .x / total_opds))
+a <- stack(tmp)
+ggplot(na.omit(a) %>% filter(values > 0), aes(x=values, fill=ind)) + geom_density(alpha=0.5)
+```
+
+```{r eval = FALSE}
+## Add census data (2001, 2006, 2013, 2018)
+## Household tenure 2001 - 2018 census figures h_rate = (owner occupied dwellings / total OPDs)
+## Median personal income for CURP 15yr and over
+
+rm(dflist2013, dflist2018, files, mbs, sas, path, lookups)
+
+##########################################################################################
+
+## search for some census information e.g. vv
+census_data2018 %>% select(str_which(names(census_data2018), 'weekly rent')) %>% filter(!is.na(`weekly rent 300 to 399 households in rented OPDs`))
+census_data2013 %>% select(str_which(names(census_data2013), 'median')) %>% names()
+
+########################################################################################
+## Attach some census information
+
+## Proportion of households in rented OPDs
+tmp <- census_data2013 %>% select(meshblock,
+                                  year,
+                                  `total households in OPDs`,
+                                  `sector of landlord for households in rented OPDs total households in rented OPDs`
+) %>% as.data.frame()
+tmp$mb_hh_rent_rate <- tmp[,4]/tmp[,3]
+tmp <- tmp[c(1,2,5)]
+names(tmp) <- c('meshblock', 'nearest_census_year', 'mb_hh_rent_rate')
+tmp[which(tmp$mb_hh_rent_rate == 'Inf'),'mb_hh_rent_rate'] <- 1
+tmp[which(tmp$mb_hh_rent_rate == 'NaN'),'mb_hh_rent_rate'] <- 0
+test <- left_join(tas, tmp, by = c('meshblock', 'nearest_census_year'))
+tas <- test
+rm(tmp, test)
+
+tmp <- census_data2018 %>% select(sa1,
+                                  year,
+                                  `total households in OPDs`,
+                                  `sector of landlord total households in rented OPDs`
+) %>% as.data.frame()
+tmp$sa1_hh_rent_rate <- tmp[,4]/tmp[,3]
+tmp <- tmp[c(1,2,5)]
+names(tmp) <- c('sa1', 'nearest_census_year', 'sa1_hh_rent_rate')
+tmp[which(tmp$sa1_hh_rent_rate == 'Inf'),'sa1_hh_rent_rate'] <- 1
+tmp[which(tmp$sa1_hh_rent_rate == 'NaN'),'sa1_hh_rent_rate'] <- 0
+test <- left_join(tas, tmp, by = c('sa1', 'nearest_census_year'))
+tas <- test
+rm(tmp, test)
+########################################################################################
+
+tas_sf <- as.data.frame(tas)
+tas_sf <- st_as_sf(x = tas_sf, coords = c('lon', 'lat'), crs = 4326)
+```

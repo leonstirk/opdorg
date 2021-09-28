@@ -15,10 +15,13 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.1.1
 Imports: 
     dplyr,
+    httr,
     magrittr,
     rlist,
+    sf,
     snakecase,
-    stringr
+    stringr,
+    utils
 Suggests: 
     rmarkdown,
     knitr

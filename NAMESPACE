@@ -3,4 +3,6 @@
 export("%>%")
 export(make2013CensusTibble)
 export(make2018CensusTibble)
+export(retrieveREST)
+export(retrieveWFS)
 importFrom(magrittr,"%>%")

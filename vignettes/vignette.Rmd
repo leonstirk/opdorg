@@ -16,7 +16,7 @@ knitr::opts_chunk$set(
 
 ```{r setup}
 library(opdorg)
-library(tidyverse)
+## library(tidyverse)
 library(stringr)
 ```
 
@@ -177,4 +177,55 @@ rm(tmp, test)
 
 tas_sf <- as.data.frame(tas)
 tas_sf <- st_as_sf(x = tas_sf, coords = c('lon', 'lat'), crs = 4326)
+```
+
+
+
+```{r eval = FALSE}
+## Replace urban area type and urban area name from StatsNZ
+## Urban Rural 2018
+tmp <- retrieveWFS(url = "https://datafinder.stats.govt.nz/services;key=a6522fb2237d41df898d66d79017fdb5/wfs",
+                   bounding_data = tas_sf,
+                   layer = "layer-92218",
+                   crs = 2193)
+## Recast the MULTISURFACE geometries into POLYGONs
+tmp <- st_cast(tmp, "GEOMETRYCOLLECTION") %>% st_collection_extract("POLYGON")
+## tm_shape(tmp) + tm_polygons()
+
+## Join polygon attributes to contained all-sales points
+test <- st_join(tas_sf, tmp, join = st_within)
+## tm_shape(test) + tm_dots(col = '')
+
+## Delete/Edit colnames
+keep <- c("UR2018_V1_00_NAME", "IUR2018_V1_00_NAME")
+tas[c("urban_area_name", "urban_area_type")] <- lapply(keep, function(x) { test[[x]] %>% as.factor })
+
+tas_sf <- as.data.frame(tas)
+tas_sf <- st_as_sf(x = tas_sf, coords = c('lon', 'lat'), crs = 4326)
+
+ur_2018_poly <- tmp
+
+rm(tmp, test, keep)
+```
+
+```{r eval = FALSE}
+## Zoning
+## tmp <- retrieveREST('https://services5.arcgis.com/MYtLmLEStmKgdmln/ArcGIS/rest/services',
+##                    'Planning_OperativeDP',
+##                    '10',
+##                    'OBJECTID')
+## saveRDS(tmp, 'datasets/zoning.rds')
+tmp <- readRDS('datasets/zoning.rds')
+tmp <- st_make_valid(tmp)
+tmp <- tmp[which(!is.na(st_dimension(tmp))),]
+
+tm_shape(tmp) + tm_polygons(col = "Zone_Name")
+
+## Join polygon attributes to contained all-sales points
+test <- st_join(tas_sf, tmp, join = st_within)
+
+## tm_shape(test) + tm_dots(col = '')
+## Delete/Edit colnames  
+keep <- c("Zone_Name", "ZONEDESCR")
+tas[c("zone_name", "zone_desc")] <- lapply(keep, function(x) { test[[x]] %>% as.character })
 ```

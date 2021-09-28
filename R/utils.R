@@ -29,7 +29,7 @@ make2013CensusTibble <- function(dflist, agg_lv = 'mb', sp_unit_ids = NA) {
   }
 
   ## Get specified spatial unit rows only
-  if(!is.na(sp_unit_ids)){
+  if(length(sp_unit_ids) > 1 & !anyNA(sp_unit_ids)){
     dflist <- lapply(dflist, function(x) { dplyr::filter(x, Code %in% sp_unit_ids) })
   }
 

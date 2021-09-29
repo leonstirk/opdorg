@@ -212,7 +212,7 @@ clean2013colnames <- function(colnames){
     ## Replace 'census usually resident population' with 'CURP'
     temp <- stringr::str_replace_all(temp, "census usually resident population", "CURP")
     ## Replace 'aged 15 years and over' with 'aged 15+'
-    temp <- stringr::str_replace_all(temp, "aged 15 years and over", "aged 15+")
+    ## temp <- stringr::str_replace_all(temp, "aged 15 years and over", "aged 15+")
     ## Remove the word 'census'
     temp <- stringr::str_replace_all(temp, '(^\\d{4})\\scensus', '\\1')
     ## Get rid of trailing "" if necessary

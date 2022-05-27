@@ -56,6 +56,7 @@ make2013CensusTibble <- function(dflist, agg_lv = 'mb', sp_unit_ids = NA) {
     })
 
     ref <- ylist %>% lapply(names) %>% lapply(length) %>% unlist
+    if(!all(ref == ref[1])){print('uneven category numbers')}
     ref <- which(ref == min(ref))[1]
 
     ylist <- ylist %>% lapply(., function(y) { y %>% dplyr::select((ylist[[ref]] %>% names)) })
@@ -95,8 +96,9 @@ make2018CensusTibble <- function(dflist, looklist, sp_unit_ids = NA, keep_2018 =
   }
 
   ## Get specified spatial unit rows only
-  if(!is.na(sp_unit_ids)){
-    dflist <- lapply(dflist, function(x) { dplyr::filter(x, SA12018_V1_00 %in% sp_unit_ids) })
+  if(length(sp_unit_ids) > 1 & !anyNA(sp_unit_ids)){
+    ## dflist <- lapply(dflist, function(x) { dplyr::filter(x, SA12018_V1_00 %in% sp_unit_ids) })
+    dflist <- lapply(dflist, function(x) { x[which(x$SA12018_V1_00 %in% sp_unit_ids),] })
   }
 
   for(i in 1:length(looklist)) {
@@ -195,6 +197,8 @@ clean2013colnames <- function(colnames){
     temp <- stringr::str_replace_all(temp, "\\x96", "to")
     ## replace / with _
     temp <- stringr::str_replace_all(temp, '/', '_')
+    ## replace - with 'to'
+    temp <- stringr::str_replace_all(temp, '\\-', 'to')
 
     ## Remove everything that is not a number or letter
     temp <- stringr::str_replace_all(temp, "[^0-9a-zA-Z\\s_]", "")

@@ -4,14 +4,10 @@
 \alias{retrieveREST}
 \title{Retrieve REST layer data in WGS84 coordinate format}
 \usage{
-retrieveREST(url, feature, layer, id_var_name)
+retrieveREST(url, id_var_name)
 }
 \arguments{
 \item{url}{character}
-
-\item{feature}{character}
-
-\item{layer}{character}
 
 \item{id_var_name}{character}
 }

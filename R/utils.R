@@ -197,8 +197,11 @@ clean2013colnames <- function(colnames){
     temp <- stringr::str_replace_all(temp, "\\x96", "to")
     ## replace / with _
     temp <- stringr::str_replace_all(temp, '/', '_')
-    ## replace - with 'to'
-    temp <- stringr::str_replace_all(temp, '\\-', 'to')
+    ## replace \\d- with 'to'
+    temp <- stringr::str_replace_all(temp, '(\\d)\\-', '\\1_to_')
+
+    ## replace the rest of the - with _
+    temp <- stringr::str_replace_all(temp, '-', '_')
 
     ## Remove everything that is not a number or letter
     temp <- stringr::str_replace_all(temp, "[^0-9a-zA-Z\\s_]", "")
